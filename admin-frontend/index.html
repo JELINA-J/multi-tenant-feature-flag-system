@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Org Admin — Feature Flag System</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; background: #f7f7f9; color: #222; }
+  h1 { font-size: 1.4rem; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  input, select { width: 100%; padding: 8px; margin: 6px 0 12px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+  button { background: #222; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #444; }
+  .msg { font-size: 0.9rem; margin-top: 8px; }
+  .error { color: #c0392b; }
+  .success { color: #27ae60; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+  .tabs { display: flex; gap: 10px; margin-bottom: 14px; }
+  .tabs button { background: #eee; color: #222; }
+  .tabs button.active { background: #222; color: #fff; }
+  #logoutBtn { background: #888; float: right; }
+  .toggle { cursor: pointer; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; }
+  .on { background: #d4f7dc; color: #1e7e34; }
+  .off { background: #fddede; color: #a12b2b; }
+  .del { background: #c0392b; padding: 4px 10px; font-size: 0.8rem; }
+</style>
+</head>
+<body>
+
+<div id="authView" class="card">
+  <div class="tabs">
+    <button id="tabLogin" class="active" onclick="switchTab('login')">Log In</button>
+    <button id="tabSignup" onclick="switchTab('signup')">Sign Up</button>
+  </div>
+
+  <div id="loginForm">
+    <h1>Org Admin Login</h1>
+    <input id="loginEmail" type="email" placeholder="Email">
+    <input id="loginPassword" type="password" placeholder="Password">
+    <button onclick="login()">Log In</button>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+
+  <div id="signupForm" style="display:none;">
+    <h1>Org Admin Sign Up</h1>
+    <input id="signupEmail" type="email" placeholder="Email">
+    <input id="signupPassword" type="password" placeholder="Password">
+    <select id="signupOrg"><option value="">Loading organizations...</option></select>
+    <button onclick="signup()">Sign Up</button>
+    <div id="signupMsg" class="msg"></div>
+  </div>
+</div>
+
+<div id="dashboardView" class="card" style="display:none;">
+  <button id="logoutBtn" onclick="logout()">Log Out</button>
+  <h1>Feature Flags</h1>
+
+  <input id="flagKey" type="text" placeholder="Feature key (e.g. dark_mode)">
+  <button onclick="createFlag()">Create Flag</button>
+  <div id="createMsg" class="msg"></div>
+
+  <table>
+    <thead><tr><th>Key</th><th>Status</th><th></th></tr></thead>
+    <tbody id="flagTableBody"></tbody>
+  </table>
+</div>
+
+<script>
+const API = 'http://localhost:5000/api';
+
+function getToken() { return localStorage.getItem('orgadmin_token'); }
+function setToken(t) { localStorage.setItem('orgadmin_token', t); }
+function clearToken() { localStorage.removeItem('orgadmin_token'); }
+
+function switchTab(tab) {
+  document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+  document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
+  document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
+  if (tab === 'signup') loadOrgOptions();
+}
+
+async function loadOrgOptions() {
+  const select = document.getElementById('signupOrg');
+  try {
+    const res = await fetch(`${API}/organizations/public`);
+    const orgs = await res.json();
+    select.innerHTML = orgs.length
+      ? orgs.map(o => `<option value="${o._id}">${o.name}</option>`).join('')
+      : '<option value="">No organizations created yet — ask your Super Admin</option>';
+  } catch (err) {
+    select.innerHTML = '<option value="">Could not load organizations</option>';
+  }
+}
+
+function showView() {
+  const token = getToken();
+  document.getElementById('authView').style.display = token ? 'none' : 'block';
+  document.getElementById('dashboardView').style.display = token ? 'block' : 'none';
+  if (token) loadFlags();
+}
+
+async function signup() {
+  const email = document.getElementById('signupEmail').value;
+  const password = document.getElementById('signupPassword').value;
+  const organizationId = document.getElementById('signupOrg').value;
+  const msg = document.getElementById('signupMsg');
+  msg.textContent = '';
+
+  if (!organizationId) {
+    msg.textContent = 'Please select an organization';
+    msg.className = 'msg error';
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/auth/orgadmin/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, organizationId })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      msg.textContent = data.message || 'Signup failed';
+      msg.className = 'msg error';
+      return;
+    }
+    setToken(data.token);
+    showView();
+  } catch (err) {
+    msg.textContent = 'Could not reach server.';
+    msg.className = 'msg error';
+  }
+}
+
+async function login() {
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+  const msg = document.getElementById('loginMsg');
+  msg.textContent = '';
+
+  try {
+    const res = await fetch(`${API}/auth/orgadmin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      msg.textContent = data.message || 'Login failed';
+      msg.className = 'msg error';
+      return;
+    }
+    setToken(data.token);
+    showView();
+  } catch (err) {
+    msg.textContent = 'Could not reach server.';
+    msg.className = 'msg error';
+  }
+}
+
+function logout() {
+  clearToken();
+  showView();
+}
+
+async function createFlag() {
+  const key = document.getElementById('flagKey').value;
+  const msg = document.getElementById('createMsg');
+  msg.textContent = '';
+
+  if (!key.trim()) {
+    msg.textContent = 'Feature key is required';
+    msg.className = 'msg error';
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/flags`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ key, enabled: false })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      msg.textContent = data.message || 'Failed to create flag';
+      msg.className = 'msg error';
+      return;
+    }
+    msg.textContent = `Created "${data.key}"`;
+    msg.className = 'msg success';
+    document.getElementById('flagKey').value = '';
+    loadFlags();
+  } catch (err) {
+    msg.textContent = 'Could not reach server.';
+    msg.className = 'msg error';
+  }
+}
+
+async function toggleFlag(id, current) {
+  try {
+    await fetch(`${API}/flags/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ enabled: !current })
+    });
+    loadFlags();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function deleteFlag(id) {
+  if (!confirm('Delete this flag?')) return;
+  try {
+    await fetch(`${API}/flags/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    loadFlags();
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadFlags() {
+  try {
+    const res = await fetch(`${API}/flags`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (res.status === 401 || res.status === 403) {
+      logout();
+      return;
+    }
+    const flags = await res.json();
+    const tbody = document.getElementById('flagTableBody');
+    tbody.innerHTML = flags.map(f => `
+      <tr>
+        <td>${f.key}</td>
+        <td><span class="toggle ${f.enabled ? 'on' : 'off'}" onclick="toggleFlag('${f._id}', ${f.enabled})">${f.enabled ? 'Enabled' : 'Disabled'}</span></td>
+        <td><button class="del" onclick="deleteFlag('${f._id}')">Delete</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="3">No feature flags yet</td></tr>';
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+showView();
+</script>
+</body>
+</html>
