@@ -39,7 +39,14 @@ Super Admin is **not** a DB record — per the assignment spec it uses static, c
 - **No refresh tokens** — access tokens are valid 8h, long enough for a demo/interview session; a production system would add refresh tokens and shorter access-token lifetimes.
 - **Org lookup by name for End User checks** — trades security (guessable org names) for simplicity (no auth flow needed for end users). Flagged as a known limitation above.
 - **No automated tests included** — given the 6–10h guidance, testability was prioritized in the *design* (pure route handlers, scoped queries, clear separation of concerns) over writing the test suite itself. Happy to discuss what a test plan would look like.
+  
+## Self-assessment
 
+- **Performance** — Queries are scoped and indexed where it matters (compound unique index on `organization + key` for feature flags), so lookups stay fast even as flags grow per org. No caching layer or pagination yet — for a system with hundreds of orgs/flags, the `GET /flags` and `GET /organizations` endpoints would need pagination since they currently return full result sets.
+- **Readability & Maintainability** — Routes are split by resource (`auth`, `organizations`, `flags`), with a single shared auth middleware reused across role checks, so adding a new role or route follows an existing pattern. Frontend JS is inline per-page rather than modularized, which is fine at this scale but wouldn't scale past 3 apps.
+- **Stability** — Duplicate organization names and duplicate flag keys per org are handled explicitly (409 responses via the unique index + try/catch), and auth failures return clear 401/403s rather than crashing. Not yet covered: input sanitization (e.g. very long strings, special characters in flag keys), and there's no rate limiting on the public flag-check endpoint.
+- **Testability** — Route handlers are thin and mostly delegate to Mongoose queries, which keeps them easy to unit test in isolation; middleware is also separated out so auth logic can be tested independently of routes. No automated test suite is included yet — given the 6–10h scope, design-for-testability was prioritized over writing the tests themselves. A next step would be integration tests per role (Super Admin, Org Admin, End User) covering the happy path and the 401/403/409 cases.
+  
 ## Running locally
 
 **Backend:**
