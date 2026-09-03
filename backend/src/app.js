@@ -18,4 +18,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+<<<<<<< HEAD
 module.exports = app;
+=======
+module.exports = app;
+>>>>>>> 7c59955 (Add automated backend testing to CI)

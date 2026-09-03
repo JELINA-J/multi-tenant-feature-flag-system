@@ -9,4 +9,8 @@ connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
+<<<<<<< HEAD
 });
+=======
+});
+>>>>>>> 7c59955 (Add automated backend testing to CI)
