@@ -30,3 +30,6 @@ jobs:
       - name: Check backend
         working-directory: backend
         run: npm run build --if-present
+
+      - name: Build Docker image
+        run: docker build -t feature-flag-backend ./backend
