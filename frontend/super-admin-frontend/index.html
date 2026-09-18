@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Super Admin — Feature Flag System</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; background: #f7f7f9; color: #222; }
+  h1 { font-size: 1.4rem; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+  input { width: 100%; padding: 8px; margin: 6px 0 12px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+  button { background: #222; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+  button:hover { background: #444; }
+  .msg { font-size: 0.9rem; margin-top: 8px; }
+  .error { color: #c0392b; }
+  .success { color: #27ae60; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+  #logoutBtn { background: #888; float: right; }
+</style>
+</head>
+<body>
+
+<div id="loginView" class="card">
+  <h1>Super Admin Login</h1>
+  <input id="email" type="email" placeholder="Email" value="superadmin@byepo.com">
+  <input id="password" type="password" placeholder="Password">
+  <button onclick="login()">Log In</button>
+  <div id="loginMsg" class="msg"></div>
+</div>
+
+<div id="dashboardView" class="card" style="display:none;">
+  <button id="logoutBtn" onclick="logout()">Log Out</button>
+  <h1>Organizations</h1>
+
+  <input id="orgName" type="text" placeholder="New organization name">
+  <button onclick="createOrg()">Create Organization</button>
+  <div id="createMsg" class="msg"></div>
+
+  <table>
+    <thead><tr><th>Name</th><th>Created</th></tr></thead>
+    <tbody id="orgTableBody"></tbody>
+  </table>
+</div>
+
+<script>
+const API = 'https://multi-tenant-feature-flag-management-1v6l.onrender.com/api';
+function getToken() { return localStorage.getItem('superadmin_token'); }
+function setToken(t) { localStorage.setItem('superadmin_token', t); }
+function clearToken() { localStorage.removeItem('superadmin_token'); }
+
+function showView() {
+  const token = getToken();
+  document.getElementById('loginView').style.display = token ? 'none' : 'block';
+  document.getElementById('dashboardView').style.display = token ? 'block' : 'none';
+  if (token) loadOrgs();
+}
+
+async function login() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const msg = document.getElementById('loginMsg');
+  msg.textContent = '';
+
+  try {
+    const res = await fetch(`${API}/auth/superadmin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      msg.textContent = data.message || 'Login failed';
+      msg.className = 'msg error';
+      return;
+    }
+    setToken(data.token);
+    showView();
+  } catch (err) {
+    msg.textContent = 'Could not reach server. Is the backend running?';
+    msg.className = 'msg error';
+  }
+}
+
+function logout() {
+  clearToken();
+  showView();
+}
+
+async function createOrg() {
+  const name = document.getElementById('orgName').value;
+  const msg = document.getElementById('createMsg');
+  msg.textContent = '';
+
+  if (!name.trim()) {
+    msg.textContent = 'Organization name is required';
+    msg.className = 'msg error';
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/organizations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getToken()}`
+      },
+      body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      msg.textContent = data.message || 'Failed to create organization';
+      msg.className = 'msg error';
+      return;
+    }
+    msg.textContent = `Created "${data.name}"`;
+    msg.className = 'msg success';
+    document.getElementById('orgName').value = '';
+    loadOrgs();
+  } catch (err) {
+    msg.textContent = 'Could not reach server.';
+    msg.className = 'msg error';
+  }
+}
+
+async function loadOrgs() {
+  try {
+    const res = await fetch(`${API}/organizations`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (res.status === 401 || res.status === 403) {
+      logout();
+      return;
+    }
+    const orgs = await res.json();
+    const tbody = document.getElementById('orgTableBody');
+    tbody.innerHTML = orgs.map(o => `
+      <tr><td>${o.name}</td><td>${new Date(o.createdAt).toLocaleDateString()}</td></tr>
+    `).join('') || '<tr><td colspan="2">No organizations yet</td></tr>';
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+showView();
+</script>
+</body>
+</html>

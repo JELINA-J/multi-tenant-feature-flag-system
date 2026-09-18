@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Feature Check — Feature Flag System</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 480px; margin: 60px auto; padding: 0 20px; background: #f7f7f9; color: #222; }
+  h1 { font-size: 1.4rem; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 24px; }
+  input { width: 100%; padding: 8px; margin: 6px 0 12px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+  button { background: #222; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; width: 100%; }
+  button:hover { background: #444; }
+  .result { margin-top: 18px; padding: 14px; border-radius: 6px; font-weight: 600; text-align: center; display: none; }
+  .enabled { background: #d4f7dc; color: #1e7e34; }
+  .disabled { background: #fddede; color: #a12b2b; }
+  .notfound { background: #fdf3d4; color: #8a6d00; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Check a Feature Flag</h1>
+  <p style="font-size:0.85rem;color:#666;">Enter your organization name and the feature key you want to check.</p>
+
+  <input id="orgName" type="text" placeholder="Organization name">
+  <input id="featureKey" type="text" placeholder="Feature key (e.g. dark_mode)">
+  <button onclick="checkFlag()">Check Feature</button>
+
+  <div id="result" class="result"></div>
+</div>
+
+<script>
+const API = 'https://multi-tenant-feature-flag-management-1v6l.onrender.com/api';
+async function checkFlag() {
+  const organizationName = document.getElementById('orgName').value.trim();
+  const key = document.getElementById('featureKey').value.trim();
+  const result = document.getElementById('result');
+
+  if (!organizationName || !key) {
+    result.style.display = 'block';
+    result.className = 'result disabled';
+    result.textContent = 'Please fill in both fields.';
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API}/flags/check?organizationName=${encodeURIComponent(organizationName)}&key=${encodeURIComponent(key)}`);
+    const data = await res.json();
+    result.style.display = 'block';
+
+    if (!res.ok) {
+      result.className = 'result notfound';
+      result.textContent = data.message || 'Something went wrong';
+      return;
+    }
+
+    if (!data.found) {
+      result.className = 'result notfound';
+      result.textContent = `Feature "${key}" does not exist for this organization`;
+      return;
+    }
+
+    if (data.enabled) {
+      result.className = 'result enabled';
+      result.textContent = `✓ "${key}" is ENABLED for ${organizationName}`;
+    } else {
+      result.className = 'result disabled';
+      result.textContent = `✗ "${key}" is DISABLED for ${organizationName}`;
+    }
+  } catch (err) {
+    result.style.display = 'block';
+    result.className = 'result notfound';
+    result.textContent = 'Could not reach server. Is the backend running?';
+  }
+}
+</script>
+</body>
+</html>
